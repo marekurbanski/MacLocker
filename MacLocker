@@ -8,7 +8,7 @@ PASSWORD="password"
 
 # minumum power to lock/unlock screen. This example is -63 dBm
 # Tested with MacBook Pro 15 and Samsung Galaxy S8 its about 2-3 meters of activity
-dBm=63
+dBm=60
 
 # Set this to false to disable console notifications
 debug="true"
@@ -47,33 +47,43 @@ EOF
 
 function checkRange {
     ID=$1
+    action=""
+    # checking if MAC is connected
     if [ "$debug" == "true" ]; then echo "Checking range $ID"; fi
     i=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | wc -l | xargs`
+    if [ "$debug" == "true" ]; then echo "Results found $i"; fi
     if [ "$i" == "0" ]
-	then	
-	# checking if can we connect	
+	then
+	# Not connected, checking if can we connect
 	if [ "$debug" == "true" ]; then echo "Not connecred. Trying to connect to $ID"; fi
 	blueutil --connect $ID
 
+	# checking if conneced afret forceing to connect
 	i=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | wc -l | xargs`
 	if [ "$i" == "0" ]
 	    then
+	    # not connected, Block screen
 	    if [ "$debug" == "true" ]; then echo "Can't connect to $ID, I will lock screen"; fi
 	    action="LOCK"
-	else
-	    #checking transmission power
-	    if [ "$debug" == "true" ]; then echo "Connected to $ID, I will check transmition power"; fi
-	    power=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | cut -d")" -f1 | rev | cut -d "," -f1 | cut -d" " -f2 | rev | cut -d"-" -f2`
-	    if [[ $power > $dBm ]]
-		then
-		if [ "$debug" == "true" ]; then echo "Power = $power, Locking"; fi
-		action="LOCK"
-	    else
-		if [ "$debug" == "true" ]; then echo "Power = $power, Unlocking"; fi
-		action="UNLOCK"
-		fi
 	    fi
 	fi
+
+    # Its connected, time to check transmition power
+    if [ "$action" != "LOCK" ]
+	then
+	#checking transmission power
+	if [ "$debug" == "true" ]; then echo "Connected to $ID, I will check transmition power"; fi
+	power=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | cut -d")" -f1 | rev | cut -d "," -f1 | cut -d" " -f2 | rev | cut -d"-" -f2`
+	if [[ $power > $dBm ]]
+	    then
+	    if [ "$debug" == "true" ]; then echo "Power = $power, action=LOCK"; fi
+	    action="LOCK"
+	    else
+	    if [ "$debug" == "true" ]; then echo "Power = $power, action=UNLOCK"; fi
+	    action="UNLOCK"
+	    fi
+	fi
+
     }
 
 function screenIsLocked { [ "$(/usr/libexec/PlistBuddy -c "print :IOConsoleUsers:0:CGSSessionScreenIsLocked" /dev/stdin 2>/dev/null <<< "$(ioreg -n Root -d1 -a)")" = "true" ] && return 0 || return 1; }
