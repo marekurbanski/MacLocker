@@ -3,7 +3,7 @@
 # this should be the MAC ADDRESS of youre device (any phone or watch)
 MAC="88-75-98-8c-01-c2"
 
-# password do your Mac
+# password of your Mac
 PASSWORD="password"
 
 # minumum power to lock/unlock screen. This example is -63 dBm
