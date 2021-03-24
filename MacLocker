@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# this should be the MAC ADDRESS of youre device (any phone or watch)
+MAC="88-75-98-8c-01-c2"
+
+# password do your Mac
+PASSWORD="password"
+
+# minumum power to lock/unlock screen. This example is -63 dBm
+# Tested with MacBook Pro 15 and Samsung Galaxy S8 its about 2-3 meters of activity
+dBm=63
+
+# Set this to false to disable console notifications
+debug="true"
+
+
+# global variable
+action="UNLOCK"
+
+function disableSleep {
+    if [ "$debug" == "true" ]; then echo "Disable sleep"; fi
+osascript <<EOF
+tell application "System Events"
+keystroke key code 125
+end tell
+EOF
+    }
+
+function screenLock {
+    if [ "$debug" == "true" ]; then echo "Screen lock"; fi
+osascript <<EOF
+tell application "System Events"
+keystroke "q" using {control down, command down}
+end tell
+EOF
+    }
+
+function screenUnlock {
+    if [ "$debug" == "true" ]; then echo "Screen unlock"; fi
+osascript <<EOF
+tell application "System Events"
+keystroke "$PASSWORD"
+keystroke {return}
+end tell
+EOF
+    }
+
+function checkRange {
+    ID=$1
+    if [ "$debug" == "true" ]; then echo "Checking range $ID"; fi
+    i=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | wc -l | xargs`
+    if [ "$i" == "0" ]
+	then	
+	# checking if can we connect	
+	if [ "$debug" == "true" ]; then echo "Not connecred. Trying to connect to $ID"; fi
+	blueutil --connect $ID
+
+	i=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | wc -l | xargs`
+	if [ "$i" == "0" ]
+	    then
+	    if [ "$debug" == "true" ]; then echo "Can't connect to $ID, I will lock screen"; fi
+	    action="LOCK"
+	else
+	    #checking transmission power
+	    if [ "$debug" == "true" ]; then echo "Connected to $ID, I will check transmition power"; fi
+	    power=`blueutil --paired | grep connected | grep -v "Failed" | grep master | grep dBm | grep "$ID" | cut -d")" -f1 | rev | cut -d "," -f1 | cut -d" " -f2 | rev | cut -d"-" -f2`
+	    if [[ $power > $dBm ]]
+		then
+		if [ "$debug" == "true" ]; then echo "Power = $power, Locking"; fi
+		action="LOCK"
+	    else
+		if [ "$debug" == "true" ]; then echo "Power = $power, Unlocking"; fi
+		action="UNLOCK"
+		fi
+	    fi
+	fi
+    }
+
+function screenIsLocked { [ "$(/usr/libexec/PlistBuddy -c "print :IOConsoleUsers:0:CGSSessionScreenIsLocked" /dev/stdin 2>/dev/null <<< "$(ioreg -n Root -d1 -a)")" = "true" ] && return 0 || return 1; }
+function screenIsUnlocked { [ "$(/usr/libexec/PlistBuddy -c "print :IOConsoleUsers:0:CGSSessionScreenIsLocked" /dev/stdin 2>/dev/null <<< "$(ioreg -n Root -d1 -a)")" != "true" ] && return 0 || return 1; }
+
+
+# turn on BT
+blueutil -p 1
+
+# osascript -e 'tell application "Finder" to sleep'
+# osascript -e 'tell application "System Events" keystroke "q" using {control down, command down}'
+
+
+end="false"
+
+while [ "$found" != "false" ]
+    do
+    start=`date +%s`
+
+    if screenIsLocked
+	then
+        disableSleep
+	fi
+	
+    checkRange $MAC
+    
+    if [ "$action" == "LOCK" ]
+	then
+	if screenIsUnlocked
+	    then
+	    screenLock
+	    fi
+	fi
+
+    if [ "$action" == "UNLOCK" ]
+	then
+	if screenIsLocked
+	    then
+	    screenUnlock
+	    fi
+	fi
+    end=`date +%s`
+    
+    looptime=$((end-start))
+    if [ "$debug" == "true" ]; 
+	then 
+	echo "Loop time = $looptime"
+	fi
+    
+    sleep 3
+
+    done
